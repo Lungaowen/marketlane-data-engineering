@@ -9,15 +9,17 @@ services:
       - "15672:15672"
 
   warehouse:
-    image: postgres:17
+    image: clickhouse/clickhouse-server:25.8
     environment:
-      POSTGRES_DB: marketlane_warehouse
-      POSTGRES_USER: marketlane
-      POSTGRES_PASSWORD: marketlane
+      CLICKHOUSE_DB: warehouse
+      CLICKHOUSE_USER: marketlane
+      CLICKHOUSE_PASSWORD: marketlane
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ports:
-      - "5432:5432"
+      - "8123:8123"
+      - "9000:9000"
     volumes:
-      - warehouse_data:/var/lib/postgresql/data
+      - warehouse_data:/var/lib/clickhouse
       - ./warehouse/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
 
   consumer:
@@ -28,11 +30,11 @@ services:
       RABBITMQ_USER: marketlane
       RABBITMQ_PASSWORD: marketlane
       RABBITMQ_QUEUE: marketlane.events
-      POSTGRES_HOST: warehouse
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: marketlane_warehouse
-      POSTGRES_USER: marketlane
-      POSTGRES_PASSWORD: marketlane
+      CLICKHOUSE_HOST: warehouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_USER: marketlane
+      CLICKHOUSE_PASSWORD: marketlane
+      CLICKHOUSE_DATABASE: warehouse
     depends_on:
       - rabbitmq
       - warehouse

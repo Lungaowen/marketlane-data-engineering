@@ -1,32 +1,31 @@
-CREATE SCHEMA IF NOT EXISTS warehouse;
+CREATE DATABASE IF NOT EXISTS warehouse;
 
-CREATE TABLE IF NOT EXISTS raw_events (
-    id BIGSERIAL PRIMARY KEY,
-    event_type TEXT NOT NULL,
-    payload JSONB NOT NULL,
-    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+CREATE TABLE IF NOT EXISTS warehouse.raw_events
+(
+    event_type String,
+    payload String,
+    received_at DateTime64(3, 'UTC') DEFAULT now64(3)
+)
+ENGINE = MergeTree
+ORDER BY (received_at, event_type);
 
-CREATE TABLE IF NOT EXISTS warehouse.fact_bookings (
-    booking_id TEXT PRIMARY KEY,
-    vendor_id TEXT NOT NULL,
-    customer_id TEXT NOT NULL,
-    amount NUMERIC(14, 2) NOT NULL CHECK (amount >= 0),
-    created_at TIMESTAMPTZ NOT NULL,
-    loaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+CREATE TABLE IF NOT EXISTS warehouse.fact_bookings
+(
+    booking_id String,
+    vendor_id String,
+    customer_id String,
+    amount Decimal(18, 2),
+    created_at DateTime64(3, 'UTC'),
+    loaded_at DateTime64(3, 'UTC') DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY booking_id;
 
-CREATE INDEX IF NOT EXISTS idx_fact_bookings_vendor
-    ON warehouse.fact_bookings (vendor_id);
-
-CREATE INDEX IF NOT EXISTS idx_fact_bookings_created_at
-    ON warehouse.fact_bookings (created_at);
-
-CREATE OR REPLACE VIEW warehouse.booking_daily_summary AS
+CREATE VIEW IF NOT EXISTS warehouse.booking_daily_summary AS
 SELECT
-    DATE(created_at) AS booking_date,
-    COUNT(*) AS booking_count,
-    SUM(amount) AS total_amount,
-    AVG(amount) AS average_amount
-FROM warehouse.fact_bookings
-GROUP BY DATE(created_at);
+    toDate(created_at) AS booking_date,
+    count() AS booking_count,
+    sum(amount) AS total_amount,
+    avg(amount) AS average_amount
+FROM warehouse.fact_bookings FINAL
+GROUP BY booking_date;

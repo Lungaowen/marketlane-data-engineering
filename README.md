@@ -1,10 +1,10 @@
-# 📊 Marketlane Data Engineering
+# 🟢 Marketlane Data Engineering
 
-A data-engineering platform for Marketlane that consumes backend events, validates and transforms them, and loads analytics-ready data into a warehouse-style PostgreSQL database.
+A data-engineering platform for Marketlane that consumes backend events, validates and transforms them, and loads analytics-ready data into **ClickHouse**, a dedicated analytical database.
 
 ## Architecture
 
-```
+```text
 Marketlane Services
        │
        │ domain events
@@ -12,7 +12,7 @@ Marketlane Services
  RabbitMQ / Event Broker
        │
        ▼
- Python Event Consumers
+ Python Event Consumer
        │
        ├── raw_events
        │
@@ -20,37 +20,48 @@ Marketlane Services
  Validation + Transformation
        │
        ▼
- PostgreSQL Warehouse
+ ClickHouse Analytical Database
        │
-       ├── staging
-       ├── warehouse
-       └── analytics
+       ├── raw events
+       ├── fact tables
+       └── analytical views
               │
               ▼
  Analytics Service / Power BI / AI
 ```
 
+## Why ClickHouse?
+
+ClickHouse is the analytical store for this platform. It is deliberately separate from Marketlane's transactional databases such as Supabase/PostgreSQL.
+
+- **Supabase/PostgreSQL:** system of record for application transactions.
+- **RabbitMQ:** transports domain events from Marketlane services.
+- **ClickHouse:** stores analytics-oriented event and fact data for fast aggregation and reporting.
+- **Analytics Service / Power BI / AI:** consumes analytical datasets without putting reporting load on transactional services.
+
+This separation gives the application and analytics workloads different storage paths and scaling characteristics.
+
 ## V1 scope
 
 - Consume Marketlane events from RabbitMQ.
-- Persist the original event for traceability.
+- Persist original events in ClickHouse for traceability.
 - Validate supported event contracts.
-- Transform `booking.created` events into an analytics fact table.
-- Expose an analytics-ready SQL view.
-- Run the whole pipeline locally with Docker Compose.
+- Transform `booking.created` events into a ClickHouse fact table.
+- Expose an analytics-ready daily booking summary view.
+- Run the complete pipeline locally with Docker Compose.
 - Provide automated tests and CI validation.
 
 ## Project structure
 
-```
-ingestion/        RabbitMQ connection and event consumers
-events/           Event contracts and validation
-transformations/ Domain-to-warehouse transformations
-warehouse/        PostgreSQL schema and analytics views
-data_quality/     Data validation rules
-scripts/          Local producer and pipeline helpers
-tests/            Unit tests
-.github/          CI
+```text
+ingestion/       RabbitMQ connection and event consumers
+events/          Event contracts and validation
+transformations/ Domain-to-analytics transformations
+warehouse/       ClickHouse schema and analytical views
+data_quality/    Data validation rules
+scripts/         Local event producer and pipeline helpers
+tests/           Unit tests
+.github/         CI workflow
 ```
 
 ## Run locally
@@ -61,22 +72,28 @@ Requirements: Docker and Docker Compose.
 docker compose up --build
 ```
 
-In another terminal, publish a sample booking event:
+Publish a sample event from another terminal:
 
 ```bash
 docker compose run --rm producer
 ```
 
-The consumer stores the raw event and loads `warehouse.fact_bookings`.
+ClickHouse is available through:
 
-## Local services
+- HTTP: `http://localhost:8123`
+- Native protocol: `localhost:9000`
+- Database: `warehouse`
+- User: `marketlane`
 
-| Service | Purpose | Port |
-|---|---|---:|
-| `rabbitmq` | Event broker | 5672 / 15672 |
-| `warehouse` | PostgreSQL analytical store | 5432 |
-| `consumer` | Event ingestion pipeline | — |
-| `producer` | Local demo event publisher | — |
+The analytical schema is initialized from `warehouse/schema.sql`.
+
+## Example analytical query
+
+```sql
+SELECT *
+FROM warehouse.booking_daily_summary
+ORDER BY booking_date DESC;
+```
 
 ## Event contract
 
@@ -93,13 +110,15 @@ The first supported event is:
 }
 ```
 
-The production Marketlane services remain the owners of transactional data. This repository consumes events and creates analytical representations; it does not become the system of record for bookings.
+Marketlane services remain the owners of transactional data. This repository creates analytical representations from events; it does not become the system of record for bookings.
 
 ## Next evolution
 
-- Add payment, vendor and marketplace event consumers.
-- Add CDC for selected database sources where events are insufficient.
-- Introduce dbt for larger transformation models.
+- Add payment, vendor, marketplace, and other domain-event consumers.
+- Add event IDs and stronger idempotency across all event types.
+- Add data-quality gates and lineage metadata.
+- Introduce dbt for larger transformation models when the analytical layer grows.
 - Add orchestration when pipelines become scheduled and multi-stage.
-- Move from local PostgreSQL to a managed warehouse when scale requires it.
-- Add data lineage, observability and stronger data-quality gates.
+- Add object storage/lake ingestion for large historical datasets when needed.
+- Connect an analytics service, Power BI, and AI workloads to ClickHouse.
+- Add production ClickHouse Cloud or self-hosted deployment configuration separately from local Docker development.
