@@ -1,0 +1,53 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    environment:
+      RABBITMQ_DEFAULT_USER: marketlane
+      RABBITMQ_DEFAULT_PASS: marketlane
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  warehouse:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: marketlane_warehouse
+      POSTGRES_USER: marketlane
+      POSTGRES_PASSWORD: marketlane
+    ports:
+      - "5432:5432"
+    volumes:
+      - warehouse_data:/var/lib/postgresql/data
+      - ./warehouse/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+
+  consumer:
+    build: .
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: marketlane
+      RABBITMQ_PASSWORD: marketlane
+      RABBITMQ_QUEUE: marketlane.events
+      POSTGRES_HOST: warehouse
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: marketlane_warehouse
+      POSTGRES_USER: marketlane
+      POSTGRES_PASSWORD: marketlane
+    depends_on:
+      - rabbitmq
+      - warehouse
+
+  producer:
+    build: .
+    command: ["python", "scripts/publish_sample_event.py"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: marketlane
+      RABBITMQ_PASSWORD: marketlane
+      RABBITMQ_QUEUE: marketlane.events
+    depends_on:
+      - rabbitmq
+
+volumes:
+  warehouse_data:
